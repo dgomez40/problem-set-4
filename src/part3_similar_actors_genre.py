@@ -25,3 +25,78 @@ Using the imbd_movies dataset:
 '''
 
 #Write your code below
+import os
+import json
+import pandas as pd
+from sklearn.metrics import DistanceMetric
+from sklearn.metrics.pairwise import cosine_distances
+from datetime import datetime
+
+
+
+
+path = os.path.join(os.path.dirname(__file__), 'data')
+
+
+#load data
+with open('data/imdb.json', "r") as f:
+    movies = [json.loads(line) for line in f]
+
+#create a matrix so that actors are rows and the columns are genres
+
+actor_genre_count={}
+for movie in movies:
+    genres = movie.get("genres")
+    actors = movie.get("actors")
+    for actor_id, actor_name in actors:
+        if actor_id not in actor_genre_count:
+            actor_genre_count[actor_id] = {"actor_name": actor_name}
+        for genre in genres:
+            actor_genre_count[actor_id][genre] = actor_genre_count[actor_id].get(genre, 0) + 1
+
+actor_df = pd.DataFrame.from_dict(actor_genre_count, orient='index').fillna(0)
+        
+actor_names = actor_df["actor_name"]
+actor_features = actor_df.drop(columns=["actor_name"])
+
+# example
+query_actor_id = "nm1165110"
+query_vector = actor_features.loc[query_actor_id].values.reshape(1, -1)
+
+#cosine distance
+cosine_scores = cosine_distances(query_vector, actor_features.values)[0]
+
+# Put into DataFrame for ranking
+cosine_df = pd.DataFrame({
+    "actor_id": actor_features.index,
+    "actor_name": actor_names,
+    "cosine_distance": cosine_scores
+}).sort_values(by="cosine_distance")
+
+# Top 10 most similar actors (excluding Chris himself)
+top10_cosine = cosine_df[cosine_df["actor_id"] != query_actor_id].head(10)
+
+#to CSV
+timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+top10_cosine.to_csv(f'data/similar_actors_genre_{timestamp}.csv', index=False)
+
+#euclidean Distance
+euclidean_dist = DistanceMetric.get_metric("euclidean")
+euclidean_scores = euclidean_dist.pairwise(query_vector, actor_features.values)[0]
+euclidean_df = pd.DataFrame({
+    "actor_id": actor_features.index,
+    "actor_name": actor_names,
+    "euclidean_distance": euclidean_scores
+}).sort_values(by="euclidean_distance")
+
+top10_euclidean = euclidean_df[euclidean_df["actor_id"] != query_actor_id].head(10)
+
+print("Top 10 similar actors to Chris Hemsworth (Cosine distance):")
+print(top10_cosine)
+
+print("Top 10 similar actors to Chris Hemsworth (Euclidean distance):")
+print(top10_euclidean)
+
+print("Cosine distance finds actors most alike in style like Tom Cruise, Henry Cavill, while Euclidean distance favors actors closer in features.")
+
+
